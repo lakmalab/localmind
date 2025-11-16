@@ -43,6 +43,7 @@ dependencies:
   dio: ^5.4.0
   llama_cpp_dart: ^0.1.0
   llama_flutter_android: ^0.1.0
+  shared_preferences: ^2.1.0
 
 dev_dependencies:
   flutter_test:

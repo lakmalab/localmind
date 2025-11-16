@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'presentation/providers/server_provider.dart';
-import 'presentation/screens/server_home_screen.dart';
+import 'presentation/screens/home_screen.dart';
 
 void main() {
   runApp(const LocalAIServerApp());
@@ -12,15 +12,18 @@ class LocalAIServerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => ServerProvider(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ServerProvider()),
+      ],
       child: MaterialApp(
-        title: 'LocalMind',
+        title: 'Local AI Server',
         theme: ThemeData(
           primarySwatch: Colors.blue,
           useMaterial3: true,
         ),
-        home: const ServerHomeScreen(),
+        home: const HomeScreen(),
+        debugShowCheckedModeBanner: false,
       ),
     );
   }

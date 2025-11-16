@@ -12,7 +12,7 @@ class ServerHomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Local AI Server'),
+        title: const Text('LocalMind Server'),
         elevation: 2,
       ),
       body: SingleChildScrollView(

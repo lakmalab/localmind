@@ -15,7 +15,7 @@ class LocalAIServerApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => ServerProvider(),
       child: MaterialApp(
-        title: 'Local Mind',
+        title: 'LocalMind',
         theme: ThemeData(
           primarySwatch: Colors.blue,
           useMaterial3: true,

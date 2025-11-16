@@ -1,4 +1,4 @@
-import 'package:llama_cpp_dart/llama_cpp_dart.dart';
+import 'package:llama_flutter_android/llama_flutter_android.dart';
 import '../../core/utils/logger.dart';
 
 abstract class AIModel {
@@ -9,7 +9,7 @@ abstract class AIModel {
 
 class LlamaGGUFModel implements AIModel {
   final String modelPath;
-  Llama? _llamaInstance;
+  late final LlamaController _llama;
   bool _isInitialized = false;
 
   LlamaGGUFModel(this.modelPath);
@@ -19,21 +19,13 @@ class LlamaGGUFModel implements AIModel {
     try {
       Logger.log('Initializing GGUF model from: $modelPath', tag: 'LLAMA_MODEL');
 
-      // Correct ContextParams fields
-      final contextParams = ContextParams()
-        ..nCtx = 2048
-        ..nBatch = 512
-        ..nThreads = 4;
-
-      // Correct ModelParams fields
-      final modelParams = ModelParams()
-        ..nGpuLayers = 0;
-
-      // Initialize Llama
-      _llamaInstance = Llama(
-        modelPath,
-        modelParams,
-        contextParams,
+      // Create the controller and load the model
+      _llama = LlamaController();
+      await _llama.loadModel(
+        modelPath: modelPath,
+        threads: 4,
+        contextSize: 2048,
+        //batchSize: 512,
       );
 
       _isInitialized = true;
@@ -44,48 +36,35 @@ class LlamaGGUFModel implements AIModel {
     }
   }
 
-
   @override
   Future<String> generate(String prompt) async {
-    if (!_isInitialized || _llamaInstance == null) {
+    if (!_isInitialized) {
       throw Exception('Model not initialized. Call initialize() first.');
     }
 
     try {
       Logger.log('Generating response for prompt length: ${prompt.length}', tag: 'LLAMA_MODEL');
 
-      // Format prompt for Gemma (adjust based on model)
-      final formattedPrompt = '''<start_of_turn>user
-$prompt<end_of_turn>
-<start_of_turn>model
-''';
+      final outputStream = _llama.generate(
+        prompt: prompt,
+        maxTokens: 64,      // small responses
+        temperature: 0.3,   // less random
+        topK: 20,
+        topP: 0.8,
+        repeatPenalty: 1.0,
+      );
 
-      // Set the prompt
-      _llamaInstance!.setPrompt(formattedPrompt);
 
-      // Generate response by collecting tokens
-      final responseBuffer = StringBuffer();
-      int tokenCount = 0;
-      final maxTokens = 512;
+      // Collect tokens into a single string
+      final buffer = StringBuffer();
+      await for (final chunk in outputStream) {
+        buffer.write(chunk);
 
-      while (tokenCount < maxTokens) {
-        final (token, done) = _llamaInstance!.getNext();
-
-        if (done) break;
-
-        // Stop on special tokens
-        if (token.contains('<end_of_turn>') || token.contains('<start_of_turn>')) {
-          break;
-        }
-
-        responseBuffer.write(token);
-        tokenCount++;
       }
 
-      final response = responseBuffer.toString().trim();
-      Logger.log('Response generated successfully: $tokenCount tokens', tag: 'LLAMA_MODEL');
-      return response;
-
+      final responseText = buffer.toString();
+      Logger.log('Response generated: ${responseText.length} chars', tag: 'LLAMA_MODEL');
+      return responseText;
     } catch (e, stackTrace) {
       Logger.error('Failed to generate response', error: e, stackTrace: stackTrace);
       rethrow;
@@ -95,8 +74,7 @@ $prompt<end_of_turn>
   @override
   void dispose() {
     try {
-      _llamaInstance?.dispose();
-      _llamaInstance = null;
+
       _isInitialized = false;
       Logger.log('Model disposed', tag: 'LLAMA_MODEL');
     } catch (e) {
@@ -104,8 +82,6 @@ $prompt<end_of_turn>
     }
   }
 }
-
-// Fallback mock model for testing
 class MockAIModel implements AIModel {
   final String modelPath;
 
@@ -121,7 +97,7 @@ class MockAIModel implements AIModel {
   Future<String> generate(String prompt) async {
     Logger.log('Mock generating response', tag: 'MOCK_MODEL');
     await Future.delayed(const Duration(seconds: 1));
-    return "This is a MOCK response to: $prompt\n\nTo use real AI, ensure llama_cpp_dart is properly installed.";
+    return "This is a MOCK response to: $prompt\n\nTo use real AI, ensure flutter_llama is properly installed and a model is loaded.";
   }
 
   @override

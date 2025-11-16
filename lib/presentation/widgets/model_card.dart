@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:localmind/data/models/huggingface_model.dart';
 import 'package:provider/provider.dart';
 import '../providers/server_provider.dart';
 
@@ -66,7 +67,7 @@ class _ModelCardState extends State<ModelCard> {
                     if (_modelUrlController.text.isNotEmpty) {
                       try {
                         await provider.downloadAndLoadModel(
-                          _modelUrlController.text,
+                          _modelUrlController.text as HuggingFaceModel,
                         );
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(

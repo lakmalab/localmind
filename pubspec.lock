@@ -158,14 +158,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.0.0"
-  flutter_llama:
-    dependency: "direct main"
-    description:
-      name: flutter_llama
-      sha256: "4dec36ececaf98fe8260807ced4ab59ab568b87ea7a15d8a55a543ba803e3856"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.1"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -256,6 +248,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.2+1"
+  llama_flutter_android:
+    dependency: "direct main"
+    description:
+      name: llama_flutter_android
+      sha256: acf6f837a5c70d34dcff496308efad64e237baf6c7fa0f27a4e039476c08188a
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.1"
   matcher:
     dependency: transitive
     description:

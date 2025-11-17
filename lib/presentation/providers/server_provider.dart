@@ -39,6 +39,11 @@ class ServerProvider with ChangeNotifier {
   String? get currentDownloadingModelId => _currentDownloadingModelId;
   List<HuggingFaceModel> get downloadingModels => _downloadingModels;
   double getDownloadProgress(String modelId) => _downloadProgressMap[modelId] ?? 0.0;
+  bool _isLoadingModel = false;
+  String? _currentLoadingModelId;
+
+  bool get isLoadingModel => _isLoadingModel;
+  String? get currentLoadingModelId => _currentLoadingModelId;
 
   ServerProvider() {
     _httpServerService = HttpServerService(
@@ -261,6 +266,10 @@ class ServerProvider with ChangeNotifier {
     return allModels;
   }
   Future<void> loadLocalModel(HuggingFaceModel model) async {
+    _isLoadingModel = true;
+    _currentLoadingModelId = model.id;
+    notifyListeners();
+
     try {
       final directory = await getApplicationDocumentsDirectory();
       final modelPath = '${directory.path}/${AppConstants.modelStorageDir}/${model.filename}';
@@ -273,9 +282,70 @@ class ServerProvider with ChangeNotifier {
       Logger.error('Failed to load local model', error: e);
       _addLog('Error: Failed to load model: ${model.modelId}');
       rethrow;
+    } finally {
+      _isLoadingModel = false;
+      _currentLoadingModelId = null;
+      notifyListeners();
     }
   }
 
+  // Add method to stop loading
+  Future<void> stopLoadingModel() async {
+    if (_isLoadingModel) {
+      _isLoadingModel = false;
+      _currentLoadingModelId = null;
+
+      // Dispose the current model if it's partially loaded
+      _modelRepository.dispose();
+
+      _addLog('Model loading stopped');
+      notifyListeners();
+    }
+  }
+
+  // Add method to restart model loading
+  Future<void> restartModel(HuggingFaceModel model) async {
+    // First stop any current loading
+    await stopLoadingModel();
+
+    // Wait a bit before restarting
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // Restart the model loading
+    await loadLocalModel(model);
+  }
+  Future<void> stopRunningModel() async {
+    try {
+      print('🛑 Stopping running model. Current model: ${_status.currentModel}');
+
+      _modelRepository.dispose();
+
+      // FIX: Make sure we're actually setting currentModel to null
+      _status = ServerStatus(
+        isRunning: _status.isRunning,
+        port: _status.port,
+        ipAddress: _status.ipAddress,
+        currentModel: null, // Explicitly set to null
+      );
+
+      print('✅ Model stopped. Current model is now: ${_status.currentModel}');
+
+      _addLog('Model stopped');
+      notifyListeners();
+
+    } catch (e) {
+      Logger.error('Failed to stop model', error: e);
+      _addLog('Error: Failed to stop model');
+      rethrow;
+    }
+  }
+
+  // Add a method to check if a specific model is running
+  bool isModelRunning(HuggingFaceModel model) {
+    final isRunning = _status.currentModel == model.modelId;
+    print('🔍 Checking if model is running: ${model.modelId} -> $isRunning (current: ${_status.currentModel})');
+    return isRunning;
+  }
   Future<void> deleteLocalModel(HuggingFaceModel model) async {
     try {
       final directory = await getApplicationDocumentsDirectory();

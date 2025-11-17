@@ -75,7 +75,7 @@ class _ModelsScreenState extends State<ModelsScreen> with SingleTickerProviderSt
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Refreshing downloaded models...'),
-          duration: Duration(seconds: 1),
+          duration: const Duration(seconds: 1),
         ),
       );
     }
@@ -206,22 +206,82 @@ class _ModelsScreenState extends State<ModelsScreen> with SingleTickerProviderSt
             itemCount: provider.availableModels.length,
             itemBuilder: (context, index) {
               final model = provider.availableModels[index];
+              final isDownloading = provider.downloadingModels.any((m) => m.id == model.id);
+              final isDownloaded = provider.downloadedModels.any((m) => m.id == model.id);
+              final isLoading = provider.isLoadingModel && provider.currentLoadingModelId == model.id;
 
-              // Check if this model is currently being downloaded
-              final isDownloadingThisModel = provider.isDownloading &&
-                  provider.currentDownloadingModelId == model.id;
+              // FIX: Use the provider method instead of direct access
+              final isRunning = provider.isModelRunning(model);
+
+              final downloadProgress = provider.getDownloadProgress(model.id);
+
+              print('📱 Available Model: ${model.modelId} - isRunning: $isRunning, isDownloaded: $isDownloaded');
 
               return ModelListItem(
                 model: model,
-                isDownloading: isDownloadingThisModel,
-                downloadProgress: isDownloadingThisModel ? provider.downloadProgress : 0.0,
+                isDownloaded: isDownloaded,
+                isDownloading: isDownloading,
+                isLoading: isLoading,
+                isRunning: isRunning,
+                downloadProgress: downloadProgress,
                 onDownload: () => _downloadModel(provider, model),
+                onLoad: isDownloaded && !isLoading && !isRunning ? () => _loadModel(provider, model) : null,
+                onStopLoading: isLoading ? () => _stopLoadingModel(provider) : null,
+                onStopRunning: isRunning ? () => _stopRunningModel(provider) : null,
+                onRestart: isLoading ? () => _restartModel(provider, model) : null,
+                onDelete: isDownloaded && !isLoading ? () => _deleteModel(provider, model) : null,
               );
             },
           ),
         );
       },
     );
+  }
+
+  void _stopLoadingModel(ServerProvider provider) async {
+    try {
+      await provider.stopLoadingModel();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Model loading stopped'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to stop loading: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _restartModel(ServerProvider provider, HuggingFaceModel model) async {
+    try {
+      await provider.restartModel(model);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Restarting ${model.modelId}...'),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to restart model: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildDownloadedModels() {
@@ -259,15 +319,27 @@ class _ModelsScreenState extends State<ModelsScreen> with SingleTickerProviderSt
               final model = allModels[index];
               final isDownloading = provider.downloadingModels.any((m) => m.id == model.id);
               final isDownloaded = provider.downloadedModels.any((m) => m.id == model.id);
+              final isLoading = provider.isLoadingModel && provider.currentLoadingModelId == model.id;
+
+              // FIX: Use the provider method instead of direct access
+              final isRunning = provider.isModelRunning(model);
+
               final downloadProgress = provider.getDownloadProgress(model.id);
+
+              print('📱 Downloaded Model: ${model.modelId} - isRunning: $isRunning, isDownloaded: $isDownloaded');
 
               return ModelListItem(
                 model: model,
                 isDownloaded: isDownloaded,
                 isDownloading: isDownloading,
+                isLoading: isLoading,
+                isRunning: isRunning,
                 downloadProgress: downloadProgress,
-                onLoad: isDownloaded ? () => _loadModel(provider, model) : null,
-                onDelete: isDownloaded ? () => _deleteModel(provider, model) : null,
+                onLoad: isDownloaded && !isLoading && !isRunning ? () => _loadModel(provider, model) : null,
+                onStopLoading: isLoading ? () => _stopLoadingModel(provider) : null,
+                onStopRunning: isRunning ? () => _stopRunningModel(provider) : null,
+                onRestart: isLoading ? () => _restartModel(provider, model) : null,
+                onDelete: isDownloaded && !isLoading ? () => _deleteModel(provider, model) : null,
               );
             },
           ),
@@ -275,6 +347,39 @@ class _ModelsScreenState extends State<ModelsScreen> with SingleTickerProviderSt
       },
     );
   }
+
+  void _stopRunningModel(ServerProvider provider) async {
+    try {
+      print('⏹️ UI: Stopping running model...');
+      await provider.stopRunningModel();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Model stopped'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+
+        // Force a state update to ensure UI rebuilds
+        setState(() {});
+      }
+
+      print('✅ UI: Model stop completed');
+
+    } catch (e) {
+      print('❌ UI: Failed to stop model: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to stop model: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
 
   void _downloadModel(ServerProvider provider, HuggingFaceModel model) async {
     // Validate model using the new method
@@ -294,7 +399,53 @@ class _ModelsScreenState extends State<ModelsScreen> with SingleTickerProviderSt
     print('🚀 Starting download for: "${model.modelId}" with file: "${model.filename}"');
 
     try {
-      // ... permission code remains the same ...
+      // For Android 13+, we need to request specific permissions
+      PermissionStatus permissionStatus;
+
+      // First, check if we're on Android 13+
+      final isAndroid13OrAbove = await _isAndroid13OrAbove();
+      print('📱 Android version >= 13: $isAndroid13OrAbove');
+
+      if (isAndroid13OrAbove) {
+        // For Android 13+, try to request manage external storage
+        print('🔐 Requesting MANAGE_EXTERNAL_STORAGE permission');
+        permissionStatus = await Permission.manageExternalStorage.status;
+
+        if (!permissionStatus.isGranted) {
+          permissionStatus = await Permission.manageExternalStorage.request();
+        }
+
+        // If manage external storage is denied, try storage permission as fallback
+        if (permissionStatus.isDenied || permissionStatus.isPermanentlyDenied) {
+          print('⚠️ MANAGE_EXTERNAL_STORAGE denied, trying storage permission');
+          permissionStatus = await Permission.storage.request();
+        }
+      } else {
+        // For Android <13, use storage permission
+        print('🔐 Requesting STORAGE permission');
+        permissionStatus = await Permission.storage.status;
+        if (!permissionStatus.isGranted) {
+          permissionStatus = await Permission.storage.request();
+        }
+      }
+
+      print('📋 Permission status: $permissionStatus');
+
+      if (!permissionStatus.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Storage permission is required to download models'),
+              backgroundColor: Colors.red,
+              action: SnackBarAction(
+                label: 'Open Settings',
+                onPressed: () => openAppSettings(),
+              ),
+            ),
+          );
+        }
+        return;
+      }
 
       // Show downloading indicator
       if (mounted) {

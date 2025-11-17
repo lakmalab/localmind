@@ -56,41 +56,51 @@ class LlamaGGUFModel implements AIModel {
     try {
       Logger.log('Generating response with settings: $currentSettings', tag: 'LLAMA_MODEL');
 
-      final formattedPrompt = """
-<s>[INST] <<SYS>>
-${currentSettings.systemPrompt}
-<</SYS>>
-
-$prompt [/INST]
-""";
+      // ALTERNATIVE PROMPT FORMAT - Much simpler
+      final formattedPrompt = "Q: $prompt\nA:";
 
       final outputStream = _llama.generate(
         prompt: formattedPrompt,
         maxTokens: currentSettings.maxTokens,
-        temperature: currentSettings.temperature,
+        temperature: currentSettings.temperature, // Try increasing temperature
         topK: currentSettings.topK,
         topP: currentSettings.topP,
-        repeatPenalty: currentSettings.repeatPenalty,
-
+        repeatPenalty: currentSettings.repeatPenalty + 0.2, // Increase repetition penalty
       );
 
       final buffer = StringBuffer();
+      int consecutiveRepeats = 0;
       String? lastChunk;
-      int repeatCount = 0;
 
       await for (final chunk in outputStream) {
+        // Stop if we see the question being repeated
+        if (chunk.contains('Q:') || chunk.contains(prompt.split(' ').take(3).join(' '))) {
+          break;
+        }
+
+        // Stop if we see repeated chunks
         if (chunk == lastChunk) {
-          repeatCount++;
-          if (repeatCount > 3) break;  // Stop if same token repeats
+          consecutiveRepeats++;
+          if (consecutiveRepeats > 3) break;
         } else {
-          repeatCount = 0;
+          consecutiveRepeats = 0;
         }
 
         buffer.write(chunk);
         lastChunk = chunk;
+
+        // Stop if we see natural ending
+        if (chunk.contains('.') || chunk.contains('?') || chunk.contains('!')) {
+          await Future.delayed(const Duration(milliseconds: 50));
+          // Continue to get complete sentence
+        }
       }
 
-      final responseText = buffer.toString().trim();
+      String responseText = buffer.toString().trim();
+
+      // Remove any Q: prefixes that might have been generated
+      responseText = responseText.replaceAll(RegExp(r'^Q:\s*'), '');
+
       Logger.log('Response generated: $responseText', tag: 'LLAMA_MODEL');
       return responseText;
     } catch (e, stackTrace) {
@@ -98,6 +108,8 @@ $prompt [/INST]
       rethrow;
     }
   }
+
+
 
   @override
   void dispose() {

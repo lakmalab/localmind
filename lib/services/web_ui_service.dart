@@ -133,8 +133,9 @@ class WebUIService {
 
   .message {
     display: flex;
-    margin-bottom: 16px;
-    align-items: flex-end;
+    margin-bottom: 24px;
+    align-items: flex-start;
+    gap: 12px;
   }
 
   .message.user-message {
@@ -156,41 +157,106 @@ class WebUIService {
     font-weight: bold;
     font-size: 14px;
     color: white;
+    margin-top: 4px;
   }
 
-  .user-message .message-avatar { background: #6200ee; }
-  .bot-message .message-avatar { background: #03dac6; }
+  .user-message .message-avatar { 
+    background: #6200ee; 
+    order: 2;
+    margin-left: 12px;
+  }
+  
+  .bot-message .message-avatar { 
+    background: #03dac6; 
+    order: 1;
+    margin-right: 12px;
+  }
 
   .message-content {
     max-width: 70%;
     display: flex;
     flex-direction: column;
+    gap: 4px;
+  }
+
+  .user-message .message-content {
+    align-items: flex-end;
+    order: 1;
+  }
+
+  .bot-message .message-content {
+    align-items: flex-start;
+    order: 2;
   }
 
   .message-text {
-    padding: 12px 16px;
-    border-radius: 16px;
+    padding: 16px 20px;
+    border-radius: 20px;
     font-size: 15px;
     line-height: 1.5;
     word-wrap: break-word;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    white-space: pre-wrap;
+    max-width: 100%;
   }
 
   .user-message .message-text {
-    background: #6200ee;
+    background: linear-gradient(135deg, #6200ee, #7c4dff);
     color: white;
-    border-bottom-right-radius: 4px;
+    border-bottom-right-radius: 6px;
   }
 
   .bot-message .message-text {
     background: #fff;
     color: #1a1a1a;
-    border-bottom-left-radius: 4px;
+    border-bottom-left-radius: 6px;
+    border: 1px solid #e0e0e0;
+  }
+
+  .streaming-cursor {
+    display: inline-block;
+    animation: blink 1s infinite;
+    color: #6200ee;
+    font-weight: bold;
+    margin-left: 2px;
+  }
+
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+
+  .typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 16px 20px;
+    background: #fff;
+    border-radius: 20px;
+    border-bottom-left-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border: 1px solid #e0e0e0;
+  }
+
+  .typing-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #999;
+    animation: typing 1.4s infinite ease-in-out;
+  }
+
+  .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+  .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+  @keyframes typing {
+    0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+    40% { transform: scale(1); opacity: 1; }
   }
 
   /* Input */
   .input-area {
-    padding: 16px 24px;
+    padding: 20px 24px;
     background: #fff;
     display: flex;
     justify-content: center;
@@ -202,10 +268,17 @@ class WebUIService {
     width: 100%;
     display: flex;
     gap: 12px;
-    background: #f0f2f5;
-    padding: 8px 12px;
+    background: #f8f9fa;
+    padding: 12px 16px;
     border-radius: 24px;
-    align-items: center;
+    align-items: flex-end;
+    border: 1px solid #e0e0e0;
+    transition: all 0.2s ease;
+  }
+
+  .input-container:focus-within {
+    border-color: #6200ee;
+    box-shadow: 0 0 0 2px rgba(98, 0, 238, 0.1);
   }
 
   #messageInput {
@@ -216,44 +289,86 @@ class WebUIService {
     font-size: 15px;
     line-height: 1.5;
     resize: none;
+    font-family: inherit;
+    max-height: 120px;
   }
 
   #sendButton {
     background: #6200ee;
     border: none;
     color: white;
-    font-size: 18px;
-    width: 40px;
-    height: 40px;
+    font-size: 20px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
   }
 
   #sendButton:hover:not(:disabled) {
     background: #4b00b5;
+    transform: scale(1.05);
   }
 
   #sendButton:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+    transform: none;
   }
 
   .welcome-state {
     text-align: center;
-    margin-top: 100px;
+    margin-top: 120px;
     color: #737373;
   }
 
-  .welcome-state h2 { font-size: 24px; margin-bottom: 8px; }
-  .welcome-state p { font-size: 15px; }
+  .welcome-state h2 { 
+    font-size: 28px; 
+    margin-bottom: 12px; 
+    font-weight: 300;
+  }
+  
+  .welcome-state p { 
+    font-size: 16px; 
+    opacity: 0.8;
+  }
 
   @media (max-width: 768px) {
     .sidebar { display: none; }
     .messages-wrapper { padding: 16px; }
-    .input-area { padding: 12px; }
+    .input-area { padding: 16px; }
+    
+    .message-content {
+      max-width: 85%;
+    }
+    
+    .message-avatar {
+      width: 32px;
+      height: 32px;
+      font-size: 12px;
+    }
+  }
+
+  /* Scrollbar styling */
+  .messages-container::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .messages-container::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .messages-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+  }
+
+  .messages-container::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
   }
 </style>
 </head>
@@ -267,7 +382,7 @@ class WebUIService {
     <div class="sidebar-content" id="conversationList"></div>
     <div class="sidebar-footer">
       <img src="assets/icon.png" alt="User">
-      <span>Andrew Neilson</span>
+      <span>Lakmal Abeyrathne</span>
     </div>
   </div>
 
@@ -289,7 +404,12 @@ class WebUIService {
     <div class="input-area">
       <div class="input-container">
         <textarea id="messageInput" placeholder="Message LocalMind…" rows="1"></textarea>
-        <button id="sendButton" disabled>→</button>
+        <button id="sendButton" disabled>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22,2 15,22 11,13 2,9"></polygon>
+          </svg>
+        </button>
       </div>
     </div>
   </div>
@@ -302,11 +422,13 @@ const messageInput = document.getElementById("messageInput");
 const sendButton = document.getElementById("sendButton");
 
 let isFirstMessage = true;
+let currentStreamingMessage = null;
+let isStreaming = false;
 
 messageInput.addEventListener('input', function() {
   this.style.height = 'auto';
-  this.style.height = Math.min(this.scrollHeight, 200) + 'px';
-  sendButton.disabled = !this.value.trim();
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  sendButton.disabled = !this.value.trim() || isStreaming;
 });
 
 function clearWelcome() {
@@ -339,39 +461,132 @@ function addMessage(content, isUser) {
 
   messagesWrapper.appendChild(msg);
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  return textDiv;
+}
+
+function showTypingIndicator() {
+  clearWelcome();
+  const msg = document.createElement("div");
+  msg.className = 'message bot-message';
+
+  const avatar = document.createElement("div");
+  avatar.className = "message-avatar";
+  avatar.textContent = "A";
+
+  const contentDiv = document.createElement("div");
+  contentDiv.className = "message-content";
+
+  const typingDiv = document.createElement("div");
+  typingDiv.className = "typing-indicator";
+  typingDiv.innerHTML = `
+    <div class="typing-dot"></div>
+    <div class="typing-dot"></div>
+    <div class="typing-dot"></div>
+  `;
+
+  contentDiv.appendChild(typingDiv);
+  msg.appendChild(avatar);
+  msg.appendChild(contentDiv);
+
+  messagesWrapper.appendChild(msg);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  return contentDiv;
+}
+
+function updateStreamingMessage(content, isComplete = false) {
+  if (!currentStreamingMessage) return;
+  
+  const textDiv = currentStreamingMessage.querySelector('.message-text');
+  if (textDiv) {
+    textDiv.textContent = content + (isComplete ? '' : '<span class="streaming-cursor">▊</span>');
+    textDiv.innerHTML = textDiv.innerHTML;
+  }
+  
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
 async function sendMessage() {
   const message = messageInput.value.trim();
-  if (!message) return;
+  if (!message || isStreaming) return;
 
   addMessage(message, true);
   messageInput.value = "";
   messageInput.style.height = 'auto';
   sendButton.disabled = true;
+  isStreaming = true;
+
+  // Show typing indicator
+  const typingElement = showTypingIndicator();
+  let fullResponse = '';
 
   try {
-    const r = await fetch("/generate", {
+    const httpResponse = await fetch("/generate-stream", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({ prompt: message }),
     });
-    const data = await r.json();
-    addMessage(data.response, false);
+
+    if (!httpResponse.ok) {
+      throw new Error(`HTTP error!`);
+    }
+
+    const reader = httpResponse.body.getReader();
+    const decoder = new TextDecoder();
+    
+    // Replace typing indicator with streaming message
+    typingElement.remove();
+    const messageElement = document.createElement("div");
+    messageElement.className = "message-text";
+    currentStreamingMessage = document.createElement("div");
+    currentStreamingMessage.className = 'message bot-message';
+    
+    const avatar = document.createElement("div");
+    avatar.className = "message-avatar";
+    avatar.textContent = "A";
+
+    const contentDiv = document.createElement("div");
+    contentDiv.className = "message-content";
+    contentDiv.appendChild(messageElement);
+
+    currentStreamingMessage.appendChild(avatar);
+    currentStreamingMessage.appendChild(contentDiv);
+    messagesWrapper.appendChild(currentStreamingMessage);
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      fullResponse += chunk;
+      updateStreamingMessage(fullResponse, false);
+    }
+
+    // Final update without cursor
+    updateStreamingMessage(fullResponse, true);
+    currentStreamingMessage = null;
+
   } catch (err) {
-    addMessage("Sorry, I encountered an error.", false);
+    console.error('Error:', err);
+    // Remove typing indicator on error
+    typingElement.remove();
+    addMessage("Sorry, I encountered an error: " + err.message, false);
   } finally {
+    isStreaming = false;
+    sendButton.disabled = false;
     messageInput.focus();
   }
 }
 
 sendButton.addEventListener("click", sendMessage);
 messageInput.addEventListener("keydown", e => {
-  if (e.key === "Enter" && !e.shiftKey) {
+  if (e.key === "Enter" && !e.shiftKey && !isStreaming) {
     e.preventDefault();
     sendMessage();
   }
 });
+
+// Focus input on load
+messageInput.focus();
 </script>
 </body>
 </html>

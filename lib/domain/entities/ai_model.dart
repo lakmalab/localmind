@@ -5,6 +5,7 @@ import '../../data/models/model_settings.dart';
 abstract class AIModel {
   Future<void> initialize();
   Future<String> generate(String prompt, {ModelSettings? settings});
+  Stream<String> generateStream(String prompt, {ModelSettings? settings}); // Add this
   void dispose();
   ModelSettings get settings;
   set settings(ModelSettings newSettings);
@@ -48,6 +49,81 @@ class LlamaGGUFModel implements AIModel {
   }
 
   @override
+  Stream<String> generateStream(String prompt, {ModelSettings? settings}) async* {
+    if (!_isInitialized) throw Exception('Model not initialized.');
+
+    final currentSettings = settings ?? _settings;
+
+    try {
+      Logger.log('Generating streaming response', tag: 'LLAMA_MODEL');
+
+      // Simple prompt format
+      final formattedPrompt = "Q: $prompt\nA:";
+
+      final outputStream = _llama.generate(
+        prompt: formattedPrompt,
+        maxTokens: 100, // Keep it short to prevent rambling
+        temperature: currentSettings.temperature,
+        topK: currentSettings.topK,
+        topP: currentSettings.topP,
+        repeatPenalty: currentSettings.repeatPenalty + 0.3, // Strong repetition penalty
+      );
+
+      final buffer = StringBuffer();
+      final List<String> recentTokens = [];
+      const int repetitionWindow = 8;
+      bool gotCompleteAnswer = false;
+
+      await for (final chunk in outputStream) {
+        // Yield each chunk immediately for streaming
+        yield chunk;
+        buffer.write(chunk);
+
+        // Add to recent tokens for repetition detection
+        recentTokens.add(chunk);
+        if (recentTokens.length > repetitionWindow) {
+          recentTokens.removeAt(0);
+        }
+
+        // Check for repetition
+        if (_hasRepetition(recentTokens)) {
+          Logger.log('Repetition detected, stopping generation', tag: 'LLAMA_MODEL');
+          break;
+        }
+
+        // Stop if we get a complete answer (ends with punctuation)
+        if (!gotCompleteAnswer && (chunk.contains('.') || chunk.contains('?') || chunk.contains('!'))) {
+          gotCompleteAnswer = true;
+          // Continue for a bit more to get full context
+          await Future.delayed(const Duration(milliseconds: 50));
+        }
+
+        // Stop if model starts generating new questions (rambling)
+        if (chunk.contains('Q:') && buffer.length > 20) {
+          Logger.log('Model started rambling, stopping generation', tag: 'LLAMA_MODEL');
+          break;
+        }
+      }
+
+      Logger.log('Streaming generation completed', tag: 'LLAMA_MODEL');
+    } catch (e, stackTrace) {
+      Logger.error('Failed to generate streaming response', error: e, stackTrace: stackTrace);
+      rethrow;
+    }
+  }
+
+  bool _hasRepetition(List<String> recentTokens) {
+    if (recentTokens.length < 6) return false;
+
+    // Check for character-level repetition
+    final text = recentTokens.join('');
+    if (RegExp(r'(.)\1{5,}').hasMatch(text)) {
+      return true;
+    }
+
+    return false;
+  }
+  @override
   Future<String> generate(String prompt, {ModelSettings? settings}) async {
     if (!_isInitialized) throw Exception('Model not initialized.');
 
@@ -56,50 +132,41 @@ class LlamaGGUFModel implements AIModel {
     try {
       Logger.log('Generating response with settings: $currentSettings', tag: 'LLAMA_MODEL');
 
-      // ALTERNATIVE PROMPT FORMAT - Much simpler
       final formattedPrompt = "Q: $prompt\nA:";
 
       final outputStream = _llama.generate(
         prompt: formattedPrompt,
         maxTokens: currentSettings.maxTokens,
-        temperature: currentSettings.temperature, // Try increasing temperature
+        temperature: currentSettings.temperature,
         topK: currentSettings.topK,
         topP: currentSettings.topP,
-        repeatPenalty: currentSettings.repeatPenalty + 0.2, // Increase repetition penalty
+        repeatPenalty: currentSettings.repeatPenalty,
       );
 
       final buffer = StringBuffer();
-      int consecutiveRepeats = 0;
-      String? lastChunk;
+      final List<String> recentTokens = [];
+      const int repetitionWindow = 10; // Check last 10 tokens for repetition
 
       await for (final chunk in outputStream) {
-        // Stop if we see the question being repeated
-        if (chunk.contains('Q:') || chunk.contains(prompt.split(' ').take(3).join(' '))) {
-          break;
-        }
-
-        // Stop if we see repeated chunks
-        if (chunk == lastChunk) {
-          consecutiveRepeats++;
-          if (consecutiveRepeats > 3) break;
-        } else {
-          consecutiveRepeats = 0;
-        }
-
         buffer.write(chunk);
-        lastChunk = chunk;
 
-        // Stop if we see natural ending
-        if (chunk.contains('.') || chunk.contains('?') || chunk.contains('!')) {
-          await Future.delayed(const Duration(milliseconds: 50));
-          // Continue to get complete sentence
+        // Add to recent tokens for repetition detection
+        recentTokens.add(chunk);
+        if (recentTokens.length > repetitionWindow) {
+          recentTokens.removeAt(0);
+        }
+
+        // Check for repetition in recent tokens
+        if (_hasRepetition(recentTokens)) {
+          Logger.log('Repetition detected, stopping generation', tag: 'LLAMA_MODEL');
+          break;
         }
       }
 
       String responseText = buffer.toString().trim();
 
-      // Remove any Q: prefixes that might have been generated
-      responseText = responseText.replaceAll(RegExp(r'^Q:\s*'), '');
+      // Simple cleanup - just remove the initial "A:" if present
+      responseText = responseText.replaceAll(RegExp(r'^A:\s*'), '');
 
       Logger.log('Response generated: $responseText', tag: 'LLAMA_MODEL');
       return responseText;
@@ -108,6 +175,8 @@ class LlamaGGUFModel implements AIModel {
       rethrow;
     }
   }
+
+
 
 
 
@@ -149,6 +218,23 @@ class MockAIModel implements AIModel {
     Logger.log('Something Is wrong Please restart the application: $currentSettings', tag: 'MOCK_MODEL');
     await Future.delayed(const Duration(seconds: 1));
     return "This is a MOCK response to: $prompt\n\nSettings used: temperature=${currentSettings.temperature}, maxTokens=${currentSettings.maxTokens}";
+  }
+
+  // ADDED: Implement generateStream for MockAIModel
+  @override
+  Stream<String> generateStream(String prompt, {ModelSettings? settings}) async* {
+    final currentSettings = settings ?? _settings;
+    Logger.log('Mock streaming response: $currentSettings', tag: 'MOCK_MODEL');
+
+    // Simulate streaming by breaking the response into chunks
+    final response = "This is a MOCK streaming response to: $prompt\n\nSettings used: temperature=${currentSettings.temperature}, maxTokens=${currentSettings.maxTokens}";
+
+    // Split into words and yield them with delays to simulate streaming
+    final words = response.split(' ');
+    for (int i = 0; i < words.length; i++) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      yield '${words[i]} ';
+    }
   }
 
   @override

@@ -9,6 +9,7 @@ import '../../data/models/model_settings.dart';
 import '../../data/models/huggingface_model.dart';
 import '../../data/repositories/ai_model_repository.dart';
 import '../../data/repositories/huggingface_repository.dart';
+import '../../domain/entities/ai_model.dart';
 import '../../services/http_server_service.dart';
 import '../../services/network_service.dart';
 
@@ -62,6 +63,8 @@ class ServerProvider with ChangeNotifier {
   List<HuggingFaceModel> get availableModels => _availableModels;
   List<HuggingFaceModel> get downloadedModels => _downloadedModels;
   bool get isSearching => _isSearching;
+  Stream<String>? _currentResponseStream;
+  Stream<String>? get currentResponseStream => _currentResponseStream;
 
   Future<void> _initialize() async {
     await _requestPermissions();
@@ -383,32 +386,62 @@ class ServerProvider with ChangeNotifier {
     }
     notifyListeners();
   }
-
-  // Chat methods
-  Future<String> generateResponse(String prompt) async {
-    if (_isGenerating) {
-      throw Exception('Already generating a response');
+  Stream<String> generateResponseStream(String prompt) {
+    final model = _modelRepository.currentModel;
+    if (model == null) {
+      throw Exception('No model loaded');
     }
 
     _isGenerating = true;
     notifyListeners();
 
     try {
-      final model = _modelRepository.currentModel;
-      if (model == null) {
-        throw Exception('No model loaded');
-      }
-
-      final response = await model.generate(prompt);
-      return response;
+      // Use the model's generate method but return a stream
+      return _streamModelResponse(model, prompt);
     } catch (e) {
-      Logger.error('Failed to generate response', error: e);
+      _isGenerating = false;
+      notifyListeners();
       rethrow;
+    }
+  }
+
+  Stream<String> _streamModelResponse(AIModel model, String prompt) async* {
+    try {
+      // This assumes your AIModel has a stream-based generate method
+      // If not, we'll need to modify the AIModel interface
+      await for (final chunk in model.generateStream(prompt)) {
+        yield chunk;
+      }
     } finally {
       _isGenerating = false;
       notifyListeners();
     }
   }
+  // Chat methods
+  // Future<String> generateResponse(String prompt) async {
+  //   if (_isGenerating) {
+  //     throw Exception('Already generating a response');
+  //   }
+  //
+  //   _isGenerating = true;
+  //   notifyListeners();
+  //
+  //   try {
+  //     final model = _modelRepository.currentModel;
+  //     if (model == null) {
+  //       throw Exception('No model loaded');
+  //     }
+  //
+  //     final response = await model.generate(prompt);
+  //     return response;
+  //   } catch (e) {
+  //     Logger.error('Failed to generate response', error: e);
+  //     rethrow;
+  //   } finally {
+  //     _isGenerating = false;
+  //     notifyListeners();
+  //   }
+  // }
 
 
   void _addLog(String message) {

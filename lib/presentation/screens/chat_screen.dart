@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/server_provider.dart';
@@ -15,6 +17,9 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
+  StreamSubscription<String>? _responseSubscription;
+  String _currentStreamingResponse = '';
+  bool _isStreaming = false;
 
   @override
   void initState() {
@@ -28,6 +33,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _responseSubscription?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
@@ -38,7 +44,7 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          0,
+          _scrollController.position.maxScrollExtent,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
@@ -46,22 +52,14 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<ServerProvider>(context);
     final hasModel = provider.status.currentModel != null;
-    final isGenerating = provider.isGenerating;
+    final isGenerating = provider.isGenerating || _isStreaming;
     final hasText = _messageController.text.trim().isNotEmpty;
     final canSend = hasModel && !isGenerating && hasText;
-
-    // Debug info
-    print('=== CHAT DEBUG ===');
-    print('hasModel: $hasModel');
-    print('isGenerating: $isGenerating');
-    print('hasText: $hasText');
-    print('canSend: $canSend');
-    print('currentModel: ${provider.status.currentModel}');
-    print('==================');
 
     return Scaffold(
       appBar: AppBar(
@@ -75,36 +73,6 @@ class _ChatScreenState extends State<ChatScreen> {
           const SizedBox(width: 8),
           Text(hasModel ? 'Model Loaded' : 'No Model'),
           const SizedBox(width: 16),
-          // Debug button
-          IconButton(
-            icon: const Icon(Icons.bug_report),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Debug Info'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('hasModel: $hasModel'),
-                      Text('isGenerating: $isGenerating'),
-                      Text('hasText: $hasText'),
-                      Text('canSend: $canSend'),
-                      Text('Model: ${provider.status.currentModel ?? "None"}'),
-                      Text('Messages: ${_messages.length}'),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Close'),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
         ],
       ),
       body: Column(
@@ -152,10 +120,20 @@ class _ChatScreenState extends State<ChatScreen> {
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.all(16),
-              reverse: true,
-              itemCount: _messages.length,
+              itemCount: _messages.length + (_isStreaming ? 1 : 0),
               itemBuilder: (context, index) {
-                final message = _messages.reversed.toList()[index];
+                if (_isStreaming && index == _messages.length) {
+                  // Show streaming response
+                  return _buildMessageBubble(
+                    ChatMessage(
+                      content: _currentStreamingResponse,
+                      isUser: false,
+                    ),
+                    isStreaming: true,
+                  );
+                }
+
+                final message = _messages[index];
                 return _buildMessageBubble(message);
               },
             ),
@@ -219,7 +197,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     maxLines: null,
                     textInputAction: TextInputAction.send,
                     onChanged: (value) {
-                      setState(() {}); // Force rebuild to update button state
+                      setState(() {});
                     },
                     onSubmitted: (value) {
                       if (canSend) {
@@ -267,7 +245,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(ChatMessage message) {
+  Widget _buildMessageBubble(ChatMessage message, {bool isStreaming = false}) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -304,7 +282,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ],
               ),
               child: Text(
-                message.content,
+                message.content + (isStreaming ? '▊' : ''),
                 style: TextStyle(
                   color: message.isUser ? Colors.white : Colors.black87,
                   fontSize: 14,
@@ -334,35 +312,50 @@ class _ChatScreenState extends State<ChatScreen> {
     final message = _messageController.text.trim();
     if (message.isEmpty) return;
 
-    print('Sending message: $message');
-
     final userMessage = ChatMessage(content: message, isUser: true);
     setState(() {
       _messages.add(userMessage);
       _messageController.clear();
+      _currentStreamingResponse = '';
+      _isStreaming = true;
     });
     _scrollToBottom();
 
     try {
-      print('Calling generateResponse...');
-      final response = await provider.generateResponse(message);
-      print('Response received: ${response.length} characters');
-
-      final aiMessage = ChatMessage(content: response, isUser: false);
-      setState(() {
-        _messages.add(aiMessage);
-      });
-      _scrollToBottom();
-    } catch (e) {
-      print('Error generating response: $e');
-      final errorMessage = ChatMessage(
-        content: 'Sorry, I encountered an error: ${e.toString().replaceAll('Exception: ', '')}',
-        isUser: false,
+      // Use streaming response
+      _responseSubscription = provider.generateResponseStream(message).listen(
+            (chunk) {
+          setState(() {
+            _currentStreamingResponse += chunk;
+          });
+          _scrollToBottom();
+        },
+        onError: (error) {
+          print('Error in stream: $error');
+          _finalizeResponse('Sorry, I encountered an error: ${error.toString()}');
+        },
+        onDone: () {
+          _finalizeResponse(_currentStreamingResponse);
+        },
       );
-      setState(() {
-        _messages.add(errorMessage);
-      });
-      _scrollToBottom();
+    } catch (e) {
+      print('Error starting stream: $e');
+      _finalizeResponse('Sorry, I encountered an error: ${e.toString()}');
     }
+  }
+
+  void _finalizeResponse(String finalResponse) {
+    _responseSubscription?.cancel();
+    setState(() {
+      _isStreaming = false;
+      if (finalResponse.isNotEmpty) {
+        _messages.add(ChatMessage(
+          content: finalResponse.trim(),
+          isUser: false,
+        ));
+      }
+      _currentStreamingResponse = '';
+    });
+    _scrollToBottom();
   }
 }

@@ -9,6 +9,7 @@ import '../../data/models/model_settings.dart';
 import '../../data/models/huggingface_model.dart';
 import '../../data/repositories/ai_model_repository.dart';
 import '../../data/repositories/huggingface_repository.dart';
+import '../../domain/entities/ai_model.dart';
 import '../../services/http_server_service.dart';
 import '../../services/network_service.dart';
 
@@ -33,6 +34,17 @@ class ServerProvider with ChangeNotifier {
   List<HuggingFaceModel> _availableModels = [];
   List<HuggingFaceModel> _downloadedModels = [];
   bool _isSearching = false;
+  String? _currentDownloadingModelId;
+  List<HuggingFaceModel> _downloadingModels = [];
+  Map<String, double> _downloadProgressMap = {};
+  String? get currentDownloadingModelId => _currentDownloadingModelId;
+  List<HuggingFaceModel> get downloadingModels => _downloadingModels;
+  double getDownloadProgress(String modelId) => _downloadProgressMap[modelId] ?? 0.0;
+  bool _isLoadingModel = false;
+  String? _currentLoadingModelId;
+
+  bool get isLoadingModel => _isLoadingModel;
+  String? get currentLoadingModelId => _currentLoadingModelId;
 
   ServerProvider() {
     _httpServerService = HttpServerService(
@@ -51,6 +63,8 @@ class ServerProvider with ChangeNotifier {
   List<HuggingFaceModel> get availableModels => _availableModels;
   List<HuggingFaceModel> get downloadedModels => _downloadedModels;
   bool get isSearching => _isSearching;
+  Stream<String>? _currentResponseStream;
+  Stream<String>? get currentResponseStream => _currentResponseStream;
 
   Future<void> _initialize() async {
     await _requestPermissions();
@@ -210,18 +224,24 @@ class ServerProvider with ChangeNotifier {
   }
 
   Future<void> downloadAndLoadModel(HuggingFaceModel model) async {
+    if (!_downloadingModels.any((m) => m.id == model.id)) {
+      _downloadingModels.add(model);
+    }
+    _downloadProgressMap[model.id] = 0.0;
     _isDownloading = true;
-    _downloadProgress = 0.0;
     notifyListeners();
+
 
     try {
       await _modelRepository.downloadAndLoadModel(
         model.downloadUrl,
             (progress) {
-          _downloadProgress = progress;
+              _downloadProgressMap[model.id] = progress;
           notifyListeners();
         },
       );
+      _downloadingModels.removeWhere((m) => m.id == model.id);
+      _downloadProgressMap.remove(model.id);
 
       _status = _status.copyWith(
         currentModel: _modelRepository.currentModelName,
@@ -232,6 +252,8 @@ class ServerProvider with ChangeNotifier {
       await loadDownloadedModels();
 
     } catch (e) {
+      _downloadingModels.removeWhere((m) => m.id == model.id);
+      _downloadProgressMap.remove(model.id);
       Logger.error('Failed to download model', error: e);
       _addLog('Error: Failed to download model');
       rethrow;
@@ -240,8 +262,17 @@ class ServerProvider with ChangeNotifier {
       notifyListeners();
     }
   }
-
+  List<HuggingFaceModel> get allDownloadedModels {
+    final allModels = <HuggingFaceModel>[];
+    allModels.addAll(_downloadedModels);
+    allModels.addAll(_downloadingModels);
+    return allModels;
+  }
   Future<void> loadLocalModel(HuggingFaceModel model) async {
+    _isLoadingModel = true;
+    _currentLoadingModelId = model.id;
+    notifyListeners();
+
     try {
       final directory = await getApplicationDocumentsDirectory();
       final modelPath = '${directory.path}/${AppConstants.modelStorageDir}/${model.filename}';
@@ -254,9 +285,70 @@ class ServerProvider with ChangeNotifier {
       Logger.error('Failed to load local model', error: e);
       _addLog('Error: Failed to load model: ${model.modelId}');
       rethrow;
+    } finally {
+      _isLoadingModel = false;
+      _currentLoadingModelId = null;
+      notifyListeners();
     }
   }
 
+  // Add method to stop loading
+  Future<void> stopLoadingModel() async {
+    if (_isLoadingModel) {
+      _isLoadingModel = false;
+      _currentLoadingModelId = null;
+
+      // Dispose the current model if it's partially loaded
+      _modelRepository.dispose();
+
+      _addLog('Model loading stopped');
+      notifyListeners();
+    }
+  }
+
+  // Add method to restart model loading
+  Future<void> restartModel(HuggingFaceModel model) async {
+    // First stop any current loading
+    await stopLoadingModel();
+
+    // Wait a bit before restarting
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // Restart the model loading
+    await loadLocalModel(model);
+  }
+  Future<void> stopRunningModel() async {
+    try {
+      print('🛑 Stopping running model. Current model: ${_status.currentModel}');
+
+      _modelRepository.dispose();
+
+      // FIX: Make sure we're actually setting currentModel to null
+      _status = ServerStatus(
+        isRunning: _status.isRunning,
+        port: _status.port,
+        ipAddress: _status.ipAddress,
+        currentModel: null, // Explicitly set to null
+      );
+
+      print('✅ Model stopped. Current model is now: ${_status.currentModel}');
+
+      _addLog('Model stopped');
+      notifyListeners();
+
+    } catch (e) {
+      Logger.error('Failed to stop model', error: e);
+      _addLog('Error: Failed to stop model');
+      rethrow;
+    }
+  }
+
+  // Add a method to check if a specific model is running
+  bool isModelRunning(HuggingFaceModel model) {
+    final isRunning = _status.currentModel == model.modelId;
+    print('🔍 Checking if model is running: ${model.modelId} -> $isRunning (current: ${_status.currentModel})');
+    return isRunning;
+  }
   Future<void> deleteLocalModel(HuggingFaceModel model) async {
     try {
       final directory = await getApplicationDocumentsDirectory();
@@ -294,32 +386,62 @@ class ServerProvider with ChangeNotifier {
     }
     notifyListeners();
   }
-
-  // Chat methods
-  Future<String> generateResponse(String prompt) async {
-    if (_isGenerating) {
-      throw Exception('Already generating a response');
+  Stream<String> generateResponseStream(String prompt) {
+    final model = _modelRepository.currentModel;
+    if (model == null) {
+      throw Exception('No model loaded');
     }
 
     _isGenerating = true;
     notifyListeners();
 
     try {
-      final model = _modelRepository.currentModel;
-      if (model == null) {
-        throw Exception('No model loaded');
-      }
-
-      final response = await model.generate(prompt);
-      return response;
+      // Use the model's generate method but return a stream
+      return _streamModelResponse(model, prompt);
     } catch (e) {
-      Logger.error('Failed to generate response', error: e);
+      _isGenerating = false;
+      notifyListeners();
       rethrow;
+    }
+  }
+
+  Stream<String> _streamModelResponse(AIModel model, String prompt) async* {
+    try {
+      // This assumes your AIModel has a stream-based generate method
+      // If not, we'll need to modify the AIModel interface
+      await for (final chunk in model.generateStream(prompt)) {
+        yield chunk;
+      }
     } finally {
       _isGenerating = false;
       notifyListeners();
     }
   }
+  // Chat methods
+  // Future<String> generateResponse(String prompt) async {
+  //   if (_isGenerating) {
+  //     throw Exception('Already generating a response');
+  //   }
+  //
+  //   _isGenerating = true;
+  //   notifyListeners();
+  //
+  //   try {
+  //     final model = _modelRepository.currentModel;
+  //     if (model == null) {
+  //       throw Exception('No model loaded');
+  //     }
+  //
+  //     final response = await model.generate(prompt);
+  //     return response;
+  //   } catch (e) {
+  //     Logger.error('Failed to generate response', error: e);
+  //     rethrow;
+  //   } finally {
+  //     _isGenerating = false;
+  //     notifyListeners();
+  //   }
+  // }
 
 
   void _addLog(String message) {

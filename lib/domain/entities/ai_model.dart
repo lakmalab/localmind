@@ -56,12 +56,13 @@ class LlamaGGUFModel implements AIModel {
     try {
       Logger.log('Generating response with settings: $currentSettings', tag: 'LLAMA_MODEL');
 
-      final formattedPrompt = '''
+      final formattedPrompt = """
+<s>[INST] <<SYS>>
 ${currentSettings.systemPrompt}
+<</SYS>>
 
-User: $prompt
-Assistant:
-''';
+$prompt [/INST]
+""";
 
       final outputStream = _llama.generate(
         prompt: formattedPrompt,
@@ -70,11 +71,23 @@ Assistant:
         topK: currentSettings.topK,
         topP: currentSettings.topP,
         repeatPenalty: currentSettings.repeatPenalty,
+
       );
 
       final buffer = StringBuffer();
+      String? lastChunk;
+      int repeatCount = 0;
+
       await for (final chunk in outputStream) {
+        if (chunk == lastChunk) {
+          repeatCount++;
+          if (repeatCount > 3) break;  // Stop if same token repeats
+        } else {
+          repeatCount = 0;
+        }
+
         buffer.write(chunk);
+        lastChunk = chunk;
       }
 
       final responseText = buffer.toString().trim();
@@ -121,7 +134,7 @@ class MockAIModel implements AIModel {
   @override
   Future<String> generate(String prompt, {ModelSettings? settings}) async {
     final currentSettings = settings ?? _settings;
-    Logger.log('Mock generating response with settings: $currentSettings', tag: 'MOCK_MODEL');
+    Logger.log('Something Is wrong Please restart the application: $currentSettings', tag: 'MOCK_MODEL');
     await Future.delayed(const Duration(seconds: 1));
     return "This is a MOCK response to: $prompt\n\nSettings used: temperature=${currentSettings.temperature}, maxTokens=${currentSettings.maxTokens}";
   }

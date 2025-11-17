@@ -11,7 +11,7 @@ class ModelSettings {
     this.maxTokens = 512,
     this.topP = 0.8,
     this.topK = 40,
-    this.repeatPenalty = 1.0,
+    this.repeatPenalty = 1.15,
     this.systemPrompt = 'You are a helpful assistant. Answer concisely and stay on topic.',
   });
 

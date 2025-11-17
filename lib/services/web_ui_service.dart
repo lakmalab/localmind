@@ -4,337 +4,377 @@ class WebUIService {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>LocalMind Chat</title>
-
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LocalMind</title>
 <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    background: #f0f2f5;
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+  }
 
-    body {
-        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
-        height: 100vh;
-        padding: 20px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }
+  .app-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+  }
 
-    /* Glass Container */
-    .chat-container {
-        width: 100%;
-        max-width: 850px;
-        height: 90vh;
-        max-height: 720px;
+  /* Sidebar */
+  .sidebar {
+    width: 280px;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #e0e0e0;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+  }
 
-        background: rgba(255, 255, 255, 0.18);
-        backdrop-filter: blur(22px);
-        -webkit-backdrop-filter: blur(22px);
-        
-        border-radius: 28px;
-        padding: 0;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    border-bottom: 1px solid #e0e0e0;
+  }
 
-        border: 1px solid rgba(255,255,255,0.25);
-        box-shadow: 0 20px 60px rgba(0,0,0,0.25);
-    }
+  .sidebar-header img {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+  }
 
-    /* Header */
-    .chat-header {
-        text-align: center;
-        padding: 22px 10px;
-        background: rgba(255,255,255,0.06);
-        border-bottom: 1px solid rgba(255,255,255,0.25);
-        backdrop-filter: blur(30px);
-    }
+  .new-chat-btn {
+    background: #6200ee;
+    color: white;
+    border: none;
+    border-radius: 24px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: 0.2s;
+  }
 
-    .chat-header h1 {
-        font-size: 26px;
-        font-weight: 700;
-        color: #fff;
-        margin-bottom: 4px;
-        letter-spacing: -0.5px;
-    }
+  .new-chat-btn:hover {
+    background: #4b00b5;
+  }
 
-    .status {
-        color: rgba(255,255,255,0.85);
-        font-size: 14px;
-    }
+  .sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+  }
 
-    /* Messages Area */
-    .messages-container {
-        flex: 1;
-        padding: 24px;
-        overflow-y: auto;
-        scroll-behavior: smooth;
-    }
+  .conversation-item {
+    padding: 10px 12px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: 0.2s;
+  }
 
-    /* Message */
-    .message {
-        display: flex;
-        gap: 12px;
-        margin-bottom: 18px;
-        animation: fadeIn 0.35s ease-out;
-    }
+  .conversation-item:hover {
+    background: #f5f5f5;
+  }
 
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(12px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
+  .conversation-item.active {
+    background: #e0e0e0;
+  }
 
-    /* Avatars */
-    .avatar {
-        width: 38px;
-        height: 38px;
-        border-radius: 50%;
-        flex-shrink: 0;
-        background-size: cover;
-        background-position: center;
-    }
+  .sidebar-footer {
+    padding: 16px;
+    border-top: 1px solid #e0e0e0;
+    font-size: 14px;
+    color: #737373;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
 
-    .user-avatar {
-        background-image: url('https://i.imgur.com/3XjzG9C.png');
-    }
-    .bot-avatar {
-        background-image: url('https://i.imgur.com/9q6xXGv.png');
-    }
+  .sidebar-footer img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+  }
 
-    /* Message Bubble */
-    .message-content {
-        max-width: 70%;
-        padding: 14px 18px;
-        border-radius: 20px;
-        line-height: 1.45;
-        font-size: 15px;
-    }
+  /* Chat area */
+  .chat-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #f0f2f5;
+  }
 
-    .user-message { justify-content: flex-end; }
-    .user-message .message-content {
-        background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
-        color: white;
-        border-bottom-right-radius: 6px;
-    }
+  .chat-header {
+    background: #fff;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e0e0e0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
 
-    .bot-message { justify-content: flex-start; }
-    .bot-message .message-content {
-        background: rgba(255,255,255,0.6);
-        color: #333;
-        border-bottom-left-radius: 6px;
-    }
+  .messages-container {
+    flex: 1;
+    padding: 24px 16px;
+    overflow-y: auto;
+  }
 
-    /* Input Bar */
-    .input-container {
-        padding: 18px 22px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
+  .messages-wrapper {
+    max-width: 720px;
+    margin: 0 auto;
+  }
 
-        background: rgba(255,255,255,0.15);
-        border-top: 1px solid rgba(255,255,255,0.2);
-        backdrop-filter: blur(15px);
-    }
+  .message {
+    display: flex;
+    margin-bottom: 16px;
+    align-items: flex-end;
+  }
 
-    #messageInput {
-        flex: 1;
-        padding: 14px 18px;
-        font-size: 15px;
+  .message.user-message {
+    justify-content: flex-end;
+  }
 
-        background: rgba(255,255,255,0.35);
-        border: 1px solid rgba(255,255,255,0.35);
-        color: #222;
+  .message.bot-message {
+    justify-content: flex-start;
+  }
 
-        border-radius: 22px;
-        outline: none;
+  .message-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 14px;
+    color: white;
+  }
 
-        transition: border-color .28s ease;
-    }
+  .user-message .message-avatar { background: #6200ee; }
+  .bot-message .message-avatar { background: #03dac6; }
 
-    #messageInput:focus {
-        border-color: #fff;
-        background: rgba(255,255,255,0.55);
-    }
+  .message-content {
+    max-width: 70%;
+    display: flex;
+    flex-direction: column;
+  }
 
-    #sendButton {
-        width: 48px;
-        height: 48px;
+  .message-text {
+    padding: 12px 16px;
+    border-radius: 16px;
+    font-size: 15px;
+    line-height: 1.5;
+    word-wrap: break-word;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
 
-        display: flex;
-        align-items: center;
-        justify-content: center;
+  .user-message .message-text {
+    background: #6200ee;
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
 
-        border: none;
-        border-radius: 50%;
-        cursor: pointer;
+  .bot-message .message-text {
+    background: #fff;
+    color: #1a1a1a;
+    border-bottom-left-radius: 4px;
+  }
 
-        font-size: 18px;
+  /* Input */
+  .input-area {
+    padding: 16px 24px;
+    background: #fff;
+    display: flex;
+    justify-content: center;
+    border-top: 1px solid #e0e0e0;
+  }
 
-        background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
-        color: white;
+  .input-container {
+    max-width: 720px;
+    width: 100%;
+    display: flex;
+    gap: 12px;
+    background: #f0f2f5;
+    padding: 8px 12px;
+    border-radius: 24px;
+    align-items: center;
+  }
 
-        transition: transform .2s;
-    }
+  #messageInput {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 15px;
+    line-height: 1.5;
+    resize: none;
+  }
 
-    #sendButton:hover {
-        transform: scale(1.07);
-    }
+  #sendButton {
+    background: #6200ee;
+    border: none;
+    color: white;
+    font-size: 18px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 
-    /* Loading Dots */
-    .loading {
-        display: none;
-        text-align: center;
-        padding: 6px;
-        font-size: 14px;
-        color: #fff;
-    }
-    .loading.active { display: block; }
-    
-    .loading-dots span {
-        animation: blink 1.4s infinite;
-    }
-    .loading-dots span:nth-child(2) { animation-delay: .2s; }
-    .loading-dots span:nth-child(3) { animation-delay: .4s; }
+  #sendButton:hover:not(:disabled) {
+    background: #4b00b5;
+  }
 
-    @keyframes blink {
-        0%, 60%, 100% { opacity: 0.25; }
-        30% { opacity: 1; }
-    }
+  #sendButton:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
 
-    /* Error box */
-    .error-message {
-        display: none;
-        background: rgba(255,0,0,0.2);
-        color: #fff;
-        margin: 12px 20px;
-        padding: 10px;
-        border-radius: 10px;
-        text-align: center;
-        font-size: 14px;
-        backdrop-filter: blur(10px);
-    }
-    .error-message.active { display: block; }
+  .welcome-state {
+    text-align: center;
+    margin-top: 100px;
+    color: #737373;
+  }
+
+  .welcome-state h2 { font-size: 24px; margin-bottom: 8px; }
+  .welcome-state p { font-size: 15px; }
+
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .messages-wrapper { padding: 16px; }
+    .input-area { padding: 12px; }
+  }
 </style>
-
 </head>
 <body>
-
-<div class="chat-container">
-    <div class="chat-header">
-        <h1>✨ LocalMind Chat</h1>
-        <div class="status" id="modelStatus">Loading model…</div>
+<div class="app-container">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <img src="assets/icon.png" alt="Logo">
+      <button class="new-chat-btn">New Chat</button>
     </div>
+    <div class="sidebar-content" id="conversationList"></div>
+    <div class="sidebar-footer">
+      <img src="assets/icon.png" alt="User">
+      <span>Andrew Neilson</span>
+    </div>
+  </div>
 
-    <div class="error-message" id="errorMessage"></div>
+  <div class="chat-area">
+    <div class="chat-header">
+      <div></div>
+      <div class="model-selector" id="modelSelector">LocalMind</div>
+    </div>
 
     <div class="messages-container" id="messagesContainer">
-        <div class="message bot-message">
-            <div class="avatar bot-avatar"></div>
-            <div class="message-content">Hello! I'm your LocalMind assistant. How can I help you today?</div>
+      <div class="messages-wrapper" id="messagesWrapper">
+        <div class="welcome-state">
+          <h2>How can I help you today?</h2>
+          <p>Ask me anything or let me assist you with your tasks</p>
         </div>
+      </div>
     </div>
 
-    <div class="loading" id="loading">
-        <div class="loading-dots">AI is thinking<span>.</span><span>.</span><span>.</span></div>
+    <div class="input-area">
+      <div class="input-container">
+        <textarea id="messageInput" placeholder="Message LocalMind…" rows="1"></textarea>
+        <button id="sendButton" disabled>→</button>
+      </div>
     </div>
-
-    <div class="input-container">
-        <input type="text" id="messageInput" placeholder="Type your message…" />
-        <button id="sendButton">➤</button>
-    </div>
+  </div>
 </div>
 
 <script>
-    const messagesContainer = document.getElementById("messagesContainer");
-    const messageInput = document.getElementById("messageInput");
-    const sendButton = document.getElementById("sendButton");
-    const loading = document.getElementById("loading");
-    const errorMessage = document.getElementById("errorMessage");
-    const modelStatus = document.getElementById("modelStatus");
+const messagesContainer = document.getElementById("messagesContainer");
+const messagesWrapper = document.getElementById("messagesWrapper");
+const messageInput = document.getElementById("messageInput");
+const sendButton = document.getElementById("sendButton");
 
-    async function loadModelInfo() {
-        try {
-            const r = await fetch("/model");
-            const data = await r.json();
-            modelStatus.textContent = data.loaded ? \`Model: \${data.model_name}\` : "No model loaded";
-        } catch {
-            modelStatus.textContent = "Model status unknown";
-        }
-    }
+let isFirstMessage = true;
 
-    function addMessage(content, isUser) {
-        const msg = document.createElement("div");
-        msg.className = \`message \${isUser ? "user-message" : "bot-message"}\`;
+messageInput.addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+  sendButton.disabled = !this.value.trim();
+});
 
-        const avatar = document.createElement("div");
-        avatar.className = \`avatar \${isUser ? "user-avatar" : "bot-avatar"}\`;
+function clearWelcome() {
+  if (isFirstMessage) {
+    const welcome = messagesWrapper.querySelector('.welcome-state');
+    if (welcome) welcome.remove();
+    isFirstMessage = false;
+  }
+}
 
-        const bubble = document.createElement("div");
-        bubble.className = "message-content";
-        bubble.textContent = content;
+function addMessage(content, isUser) {
+  clearWelcome();
+  const msg = document.createElement("div");
+  msg.className = 'message ' + (isUser ? 'user-message' : 'bot-message');
 
-        if (isUser) {
-            msg.appendChild(bubble);
-            msg.appendChild(avatar);
-        } else {
-            msg.appendChild(avatar);
-            msg.appendChild(bubble);
-        }
+  const avatar = document.createElement("div");
+  avatar.className = "message-avatar";
+  avatar.textContent = isUser ? "U" : "A";
 
-        messagesContainer.appendChild(msg);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
+  const contentDiv = document.createElement("div");
+  contentDiv.className = "message-content";
 
-    function showError(msg) {
-        errorMessage.textContent = msg;
-        errorMessage.classList.add("active");
-        setTimeout(() => errorMessage.classList.remove("active"), 4500);
-    }
+  const textDiv = document.createElement("div");
+  textDiv.className = "message-text";
+  textDiv.textContent = content;
 
-    async function sendMessage() {
-        const message = messageInput.value.trim();
-        if (!message) return;
+  contentDiv.appendChild(textDiv);
+  msg.appendChild(avatar);
+  msg.appendChild(contentDiv);
 
-        addMessage(message, true);
+  messagesWrapper.appendChild(msg);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
 
-        messageInput.value = "";
-        sendButton.disabled = true;
-        loading.classList.add("active");
+async function sendMessage() {
+  const message = messageInput.value.trim();
+  if (!message) return;
 
-        try {
-            const r = await fetch("/generate", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({ prompt: message }),
-            });
+  addMessage(message, true);
+  messageInput.value = "";
+  messageInput.style.height = 'auto';
+  sendButton.disabled = true;
 
-            if (!r.ok) {
-                const err = await r.json();
-                throw new Error(err.error || "Request failed");
-            }
+  try {
+    const r = await fetch("/generate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ prompt: message }),
+    });
+    const data = await r.json();
+    addMessage(data.response, false);
+  } catch (err) {
+    addMessage("Sorry, I encountered an error.", false);
+  } finally {
+    messageInput.focus();
+  }
+}
 
-            const data = await r.json();
-            addMessage(data.response, false);
-
-        } catch (err) {
-            showError("Error: " + err.message);
-            addMessage("Sorry, I encountered an error.", false);
-        } finally {
-            loading.classList.remove("active");
-            sendButton.disabled = false;
-            messageInput.focus();
-        }
-    }
-
-    sendButton.addEventListener("click", sendMessage);
-    messageInput.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
-
-    loadModelInfo();
+sendButton.addEventListener("click", sendMessage);
+messageInput.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
 </script>
 </body>
 </html>
 ''';
   }
-
 }

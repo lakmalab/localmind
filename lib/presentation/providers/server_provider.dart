@@ -33,6 +33,12 @@ class ServerProvider with ChangeNotifier {
   List<HuggingFaceModel> _availableModels = [];
   List<HuggingFaceModel> _downloadedModels = [];
   bool _isSearching = false;
+  String? _currentDownloadingModelId;
+  List<HuggingFaceModel> _downloadingModels = [];
+  Map<String, double> _downloadProgressMap = {};
+  String? get currentDownloadingModelId => _currentDownloadingModelId;
+  List<HuggingFaceModel> get downloadingModels => _downloadingModels;
+  double getDownloadProgress(String modelId) => _downloadProgressMap[modelId] ?? 0.0;
 
   ServerProvider() {
     _httpServerService = HttpServerService(
@@ -210,18 +216,24 @@ class ServerProvider with ChangeNotifier {
   }
 
   Future<void> downloadAndLoadModel(HuggingFaceModel model) async {
+    if (!_downloadingModels.any((m) => m.id == model.id)) {
+      _downloadingModels.add(model);
+    }
+    _downloadProgressMap[model.id] = 0.0;
     _isDownloading = true;
-    _downloadProgress = 0.0;
     notifyListeners();
+
 
     try {
       await _modelRepository.downloadAndLoadModel(
         model.downloadUrl,
             (progress) {
-          _downloadProgress = progress;
+              _downloadProgressMap[model.id] = progress;
           notifyListeners();
         },
       );
+      _downloadingModels.removeWhere((m) => m.id == model.id);
+      _downloadProgressMap.remove(model.id);
 
       _status = _status.copyWith(
         currentModel: _modelRepository.currentModelName,
@@ -232,6 +244,8 @@ class ServerProvider with ChangeNotifier {
       await loadDownloadedModels();
 
     } catch (e) {
+      _downloadingModels.removeWhere((m) => m.id == model.id);
+      _downloadProgressMap.remove(model.id);
       Logger.error('Failed to download model', error: e);
       _addLog('Error: Failed to download model');
       rethrow;
@@ -240,7 +254,12 @@ class ServerProvider with ChangeNotifier {
       notifyListeners();
     }
   }
-
+  List<HuggingFaceModel> get allDownloadedModels {
+    final allModels = <HuggingFaceModel>[];
+    allModels.addAll(_downloadedModels);
+    allModels.addAll(_downloadingModels);
+    return allModels;
+  }
   Future<void> loadLocalModel(HuggingFaceModel model) async {
     try {
       final directory = await getApplicationDocumentsDirectory();

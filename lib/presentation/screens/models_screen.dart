@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../data/models/huggingface_model.dart';
 import '../providers/server_provider.dart';
 import '../widgets/model_list_item.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 
 class ModelsScreen extends StatefulWidget {
   const ModelsScreen({super.key});
@@ -54,7 +55,17 @@ class _ModelsScreenState extends State<ModelsScreen> with SingleTickerProviderSt
 
   void _searchModels(String query) {
     final provider = Provider.of<ServerProvider>(context, listen: false);
-    provider.searchModels(query);
+    print('🔍 Searching for: $query');
+    provider.searchModels(query).then((_) {
+      print('📦 Search results: ${provider.availableModels.length} models');
+      for (var i = 0; i < provider.availableModels.length; i++) {
+        final model = provider.availableModels[i];
+        print('   $i. ${model.modelId}');
+        print('      filename: "${model.filename}"');
+        print('      size: ${model.size}');
+        print('      valid: ${model.isValidForDownload}');
+      }
+    });
   }
 
   Future<void> _refreshDownloadedModels() async {
@@ -195,8 +206,15 @@ class _ModelsScreenState extends State<ModelsScreen> with SingleTickerProviderSt
             itemCount: provider.availableModels.length,
             itemBuilder: (context, index) {
               final model = provider.availableModels[index];
+
+              // Check if this model is currently being downloaded
+              final isDownloadingThisModel = provider.isDownloading &&
+                  provider.currentDownloadingModelId == model.id;
+
               return ModelListItem(
                 model: model,
+                isDownloading: isDownloadingThisModel,
+                downloadProgress: isDownloadingThisModel ? provider.downloadProgress : 0.0,
                 onDownload: () => _downloadModel(provider, model),
               );
             },
@@ -209,7 +227,9 @@ class _ModelsScreenState extends State<ModelsScreen> with SingleTickerProviderSt
   Widget _buildDownloadedModels() {
     return Consumer<ServerProvider>(
       builder: (context, provider, child) {
-        if (provider.downloadedModels.isEmpty) {
+        final allModels = provider.allDownloadedModels;
+
+        if (allModels.isEmpty) {
           return const Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -234,14 +254,20 @@ class _ModelsScreenState extends State<ModelsScreen> with SingleTickerProviderSt
         return RefreshIndicator(
           onRefresh: _refreshDownloadedModels,
           child: ListView.builder(
-            itemCount: provider.downloadedModels.length,
+            itemCount: allModels.length,
             itemBuilder: (context, index) {
-              final model = provider.downloadedModels[index];
+              final model = allModels[index];
+              final isDownloading = provider.downloadingModels.any((m) => m.id == model.id);
+              final isDownloaded = provider.downloadedModels.any((m) => m.id == model.id);
+              final downloadProgress = provider.getDownloadProgress(model.id);
+
               return ModelListItem(
                 model: model,
-                isDownloaded: true,
-                onLoad: () => _loadModel(provider, model),
-                onDelete: () => _deleteModel(provider, model),
+                isDownloaded: isDownloaded,
+                isDownloading: isDownloading,
+                downloadProgress: downloadProgress,
+                onLoad: isDownloaded ? () => _loadModel(provider, model) : null,
+                onDelete: isDownloaded ? () => _deleteModel(provider, model) : null,
               );
             },
           ),
@@ -251,44 +277,65 @@ class _ModelsScreenState extends State<ModelsScreen> with SingleTickerProviderSt
   }
 
   void _downloadModel(ServerProvider provider, HuggingFaceModel model) async {
-    // Check storage permission first
-    final storageStatus = await Permission.storage.status;
-    if (!storageStatus.isGranted) {
-      final result = await Permission.storage.request();
-      if (!result.isGranted) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Storage permission is required to download models'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-    }
-
-    try {
-      await provider.downloadAndLoadModel(model);
+    // Validate model using the new method
+    if (!model.isValidForDownload) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${model.modelId} downloaded and loaded successfully!'),
+            content: Text('Cannot download: ${model.modelId}\nNo GGUF file available'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    print('🚀 Starting download for: "${model.modelId}" with file: "${model.filename}"');
+
+    try {
+      // ... permission code remains the same ...
+
+      // Show downloading indicator
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Downloading "${model.filename}"...'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // Proceed with download
+      print('✅ Permission granted, starting download...');
+      await provider.downloadAndLoadModel(model);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('"${model.filename}" downloaded successfully!'),
             backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
+      print('❌ Download error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to download model: $e'),
+            content: Text('Download failed: $e'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 5),
           ),
         );
       }
     }
+  }
+
+  Future<bool> _isAndroid13OrAbove() async {
+    // Check if device is running Android 13 (API 33) or above
+    final deviceInfo = await DeviceInfoPlugin().androidInfo;
+    return deviceInfo.version.sdkInt >= 33;
   }
 
   void _loadModel(ServerProvider provider, HuggingFaceModel model) async {
